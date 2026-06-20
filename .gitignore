@@ -1,0 +1,16 @@
+# Python cache e file compilati
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Artefatti Windows / WSL
+*:Zone.Identifier
+
+# Ambiente virtuale (se presente)
+venv/
+env/
+.venv/
+
+# File di sistema
+.DS_Store
+Thumbs.db
