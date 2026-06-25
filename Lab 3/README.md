@@ -76,13 +76,24 @@ All runs start from the same seed (211) and same initial policy weights.
 
 | Configuration | Best eval reward | Convergence episode | Stability |
 |:---|:---:|:---:|:---:|
-| No standardize, lr=1e-2 | ~151 (ep 50) | Never stable | Collapses after ep 100 |
-| No standardize, lr=3e-3 | ~337 (ep 150) | Unstable | Oscillates, never consistent |
+| No standardize, lr=1e-2 | ~151 (ep 50) | Never stable | Collapses very often |
+| No standardize, lr=3e-3 | ~337 (ep 150) | Unstable | Oscillates, still not consistent at al |
 | **Standardize, lr=1e-2** | **500** | **ep 250** | Good, two dips at ep 200/450 |
-| **Standardize, lr=3e-3** | **500** | **ep 150** | Best — smaller dips, more robust |
+| **Standardize, lr=3e-3** | **500** | **ep 150** | Best — smaller dips, slightly more robust |
 
-![REINFORCE ablation curves](doc/reinforce_ablations.png)
-*Evaluation reward curves for the four REINFORCE configurations. Green dashed line = solved threshold (500).*
+![REINFORCE ablation curves](img/reinforce_ablations.png)
+
+|       |        |
+| :---: | :---: |
+| ![](img/NoSTD_HR.png) | ![](img/NoSTD_LR.png) |
+
+*Evaluation reward curves for the four REINFORCE configurations(first 2)*
+
+|       |        |
+| :---: | :---: |
+| ![](img/STD_HR.png) | ![](img/STD_LR.png) |
+
+*Evaluation reward curves for the four REINFORCE configurations(other 2)*
 
 **Key finding:** standardization is the decisive factor. Without it, both learning rates lead to instability — the higher lr collapses fast (peaks at ~151 at ep 50 then diverges), the lower lr recovers partially (peak ~337 at ep 150) but never converges reliably. With standardization, both lr values solve CartPole, with lr=3e-3 being marginally more robust (smaller reward dip at ep 600 compared to lr=1e-2's dips at ep 200 and 450). The standardization=True, lr=1e-2 configuration had been used as the baseline for Exercise 1 before the ablations.
 
@@ -122,6 +133,8 @@ The critic is trained simultaneously via MSE loss against the Monte Carlo return
 
 The value baseline converges to maximum reward roughly 50–100 episodes earlier than the best standardization-only configuration. From ep 200 onwards the agent holds 500 consistently with no significant collapses, whereas the standardization runs show instability at various points. This confirms the theoretical advantage of a state-dependent baseline over a global normalization scheme.
 
+![REINFORCE value baseline](img/value_baseline.png)
+
 ---
 
 ## Exercise 3.2 — Deep Q-Network (DQN)
@@ -160,7 +173,7 @@ Two key design choices were made over the standard DQN:
 
 Training was interrupted at ~107k steps. The DQN shows the typical learning profile: step 1000 (high ε, purely random) eval reward of ~9–13, rapid improvement at step 2000 (eval ~167–229), then oscillation as ε decays and the buffer fills. The soft target update keeps learning stable without the oscillations typical of hard update DQN.
 
-![DQN CartPole curves](doc/dqn_cartpole.png)
+![DQN CartPole curves](img/Cartpole_DQN.png)
 *DQN evaluation reward and episode length on CartPole. Training stopped at ~107k steps.*
 
 ### Results — LunarLander
@@ -169,7 +182,7 @@ Full 200k step training. LunarLander is significantly harder: at step 1000 (high
 
 The Huber loss (instead of MSE used for CartPole) was chosen for LunarLander because it is less sensitive to large TD errors early in training when Q-value estimates are far from accurate — this helps stabilize the early phase where the agent is essentially random.
 
-![DQN LunarLander curves](doc/dqn_lunarlander.png)
+![DQN LunarLander curves](img/Lunar_DQN.png)
 *DQN evaluation reward and episode length on LunarLander-v3 over 200k steps.*
 
 ---
