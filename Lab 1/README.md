@@ -11,7 +11,7 @@ This lab is a study on how to exploit and adapt pre-trained convolutional networ
 
 The GTSRB training set contains 26,640 images across 43 classes, representing real-world traffic sign photos captured under varying conditions. Before doing anything else, the dataset was studied carefully to understand its structure and identify potential problems that would need to be addressed during training.
 
-![Class distribution bar chart](doc/class_distribution.png)
+![Class distribution bar chart](img/class_distribution.png)
 *Class distribution across the 43 GTSRB categories, sorted by frequency.*
 
 **Key findings from the EDA:**
@@ -26,7 +26,7 @@ The GTSRB training set contains 26,640 images across 43 classes, representing re
 
 - **No missing values.** Checked explicitly across all features grouped by class — the dataset is clean.
 
-![Brightness and contrast boxplots per class](doc/brightness_contrast.png)
+![Brightness and contrast boxplots per class](img/brightness_contrast.png)
 *Brightness (left) and contrast (right) distributions per class, shown as boxplots.*
 
 ### Data Augmentation
@@ -106,9 +106,6 @@ The model converges remarkably fast — epoch 1 already hits 97.66%, which is a 
 
 Early stopping with `patience=3` correctly identified epoch 4 as the best checkpoint and would have stopped training at epoch 7 if more epochs had been run. The `WeightedRandomSampler` played a measurable role in keeping the model honest on underrepresented classes by oversampling them during training.
 
-![Training curve](doc/training_curve.png)
-*Training loss and test accuracy across 5 epochs. Best checkpoint marked at epoch 4.*
-
 ---
 
 ## Exercise 3.3 — Traffic Sign Detection with Faster R-CNN
@@ -146,7 +143,7 @@ Evaluation was performed on the 57-image test set at IoU ≥ 0.5:
 
 The localization result is encouraging — the backbone transfer works and the RPN learns to propose reasonable bounding boxes around signs in just 3 epochs. The classification collapse, however, is explained by two compounding issues: the class ID offset described above, and an extremely sparse training set for detection (some classes appear only once in the 386 training images), which makes it nearly impossible to learn a reliable 43-class classifier from scratch in 3 epochs regardless of backbone quality.
 
-![Detection example](doc/detection_example.png)
+![Detection example](img/detection_example.png)
 *Example detections on a test image. Green: ground truth boxes. Red: predicted boxes with score > 0.5.*
 
 ---
