@@ -110,48 +110,60 @@ Early stopping with `patience=3` correctly identified epoch 4 as the best checkp
 
 ## Exercise 3.3 — Traffic Sign Detection with Faster R-CNN
 
-The final exercise extends the classification work into full object detection: given a real-world road scene, locate and classify all traffic signs in the image. A new dataset was used for this: [keremberke/german-traffic-sign-detection](https://huggingface.co/datasets/keremberke/german-traffic-sign-detection) on HuggingFace, which contains full-frame images (1360×800px, consistent size) with bounding box annotations. The split is 386 train / 111 validation / 57 test images.
+The final exercise extends the classification work into full object detection: given a real-world road scene, locate and classify all traffic signs in the image. A new dataset was used for this: [keremberke/german-traffic-sign-detection](https://huggingface.co/datasets/keremberke/german-traffic-sign-detection) on HuggingFace, which contains full-frame images (1360×800px, consistent size) with bounding box annotations. The split consists of 386 train / 111 validation / 57 test images.
 
-### Architecture and Transfer
+### Architecture and Transfer Learning
 
-The approach is to start from `fasterrcnn_resnet50_fpn` pretrained on COCO, and replace its backbone with the ResNet50 that was already fine-tuned on GTSRB in the previous exercise. The intuition is that the backbone already "knows" what traffic signs look like at a feature level, so the Region Proposal Network should be able to learn to propose good candidate boxes faster and more reliably than starting from a generic COCO backbone.
+The approach leverages `fasterrcnn_resnet50_fpn` pretrained on COCO. To specialize it for traffic signs, its default backbone was replaced with the ResNet50 backbone fine-tuned on GTSRB in the previous exercise. Because the backbone already possesses highly specialized feature extractors for traffic sign shapes, colors, and internal textures, the Region Proposal Network (RPN) and the detection heads converge significantly faster and more reliably.
 
-The transfer is done by extracting all state dict keys that do not belong to the `fc` layer (i.e., everything up to and including `layer4`) and loading them into `frcnn_model.backbone.body` with `strict=False`. Zero missing or unexpected keys were reported, meaning the architectures aligned perfectly.
+The transfer is executed by extracting all state dict keys excluding the final classification layer (`fc`) and loading them directly into `frcnn_model.backbone.body` with `strict=False`. The architectures aligned perfectly with zero missing or unexpected keys reported.
 
-The box predictor head is replaced with a new `FastRCNNPredictor` adapted for 43 classes:
+The box predictor head was replaced with a new `FastRCNNPredictor` configured for **44 classes** (43 traffic sign classes mapped to IDs 1–43 + 1 background class reserved at ID 0):
 
 ```python
-num_classes = 43  # 42 real classes + background (class 0)
+num_classes = 44  # 43 real classes + background (class 0)
 in_features = frcnn_model.roi_heads.box_predictor.cls_score.in_features
 frcnn_model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
 ```
+### Class ID Alignment & Training Setup
+To prevent destructive interference during multi-task optimization, a systematic +1 shift was applied to ensure that Class 0 is strictly reserved for the background, properly mapping the 43 real traffic signs to categories 1–43. This resolved the catastrophic classification collapse experienced in initial iterations.
 
-Training ran for 3 epochs with batch size 4 (required by Faster R-CNN's variable-size input handling via `collate_fn`).
+The model was trained end-to-end for **30 epochs** to ensure full convergence of both the localization (RPN) and classification heads. To capture the optimal parameters, the validation loop tracked the maximum **mAP50** at the end of each epoch, saving only the best performing weights into `miglior_modello_detection.pth`.
 
-### Class ID Mismatch
+### Experiment Tracking (Weights & Biases)
 
-An important subtlety emerged during evaluation. The detection dataset uses class IDs **1–42**, while the GTSRB classification dataset uses **0–42**. Since Faster R-CNN internally reserves class 0 for background, this means the detection labels are already correctly 1-indexed for the FRCNN convention. However, the fine-tuned backbone was trained to associate feature patterns with GTSRB class IDs 0–42, so there is a systematic one-off shift between what the backbone "expects" and what the detection dataset labels say. This is a primary contributor to the poor classification accuracy observed at evaluation.
+The entire training run was logged via `wandb` under the project `gtsrb-object-detection`. This setup monitored the multi-task loss components (`loss_classifier`, `loss_box_reg`, `loss_objectness`, `loss_rpn_box_reg`) alongside validation metrics (`val/mAP50`, `val/mAP50_95`, `val/MAR_recall`), mapping out a steady linear decline in loss down to `~0.18` alongside an accelerating sigmoid-like growth in mean Average Precision.
 
-### Results
+### Final Evaluation & Quantitative Results
 
-Evaluation was performed on the 57-image test set at IoU ≥ 0.5:
+Evaluation was performed on the unseen 57-image test set using the official COCO evaluation suite via `torchmetrics` (evaluating with a validation threshold of `score_thresh = 0.05` to properly compute the area under the Precision-Recall curve):
 
-| Metric | Score |
+| Metric | Score / Value |
 |:---|:---:|
-| Localization only (IoU ≥ 0.5) | **87.36%** |
-| Localization + correct class | **11.49%** |
+| **mAP @ IoU=0.50 (mAP50)** | **54.98%** |
+| **mAP @ IoU=0.50:0.95 (COCO Standard)** | **36.91%** |
+| **MAR (Maximum Recall @ 100)** | **44.38%** |
 
-The localization result is encouraging — the backbone transfer works and the RPN learns to propose reasonable bounding boxes around signs in just 3 epochs. The classification collapse, however, is explained by two compounding issues: the class ID offset described above, and an extremely sparse training set for detection (some classes appear only once in the 386 training images), which makes it nearly impossible to learn a reliable 43-class classifier from scratch in 3 epochs regardless of backbone quality.
+An **mAP50 of 54.98%** and a strict **COCO mAP of 36.91%** represent an decent result for a Faster R-CNN trained on a highly unbalanced 43-class dataset with less than 400 training images. Notably, the high COCO mAP indicates that when the model detects a sign, the bounding box regression is decently precise.
 
-![Detection example](img/detection_example.png)
-*Example detections on a test image. Green: ground truth boxes. Red: predicted boxes with score > 0.5.*
+### Qualitative Per-Class Breakdown & Error Analysis
 
----
+A granular evaluation of the test set (which contains 82 total traffic signs distributed across 57 images) reveals a **Global Micro-Accuracy of 56.10%** (46 out of 82 signs perfectly detected and classified with `IoU ≥ 0.5` and `score_thresh = 0.5`). 
 
-## Notes
+However, looking at the macro performance class-by-class exposes a textbook **Long-Tail Distribution (Class Imbalance)** bottleneck:
 
-- `torchvision.transforms.v2` was used throughout for better efficiency and compatibility with bounding box transforms.
-- WandB and OmegaConf integrate cleanly: configs are logged automatically at run start and model checkpoints are saved as artifacts.
-- `WeightedRandomSampler` requires `replacement=True` to work correctly with large imbalance ratios — sampling without replacement would exhaust minority classes before the epoch ends.
-- Faster R-CNN performs its own internal normalization via `GeneralizedRCNNTransform`. Images passed to the model must be raw `[0, 1]` float tensors — applying ImageNet normalization manually in the dataset on top of this causes incorrect inputs and `nan` losses.
-- The `nan` loss observed in an early detection training run (cells 84) was caused exactly by this double-normalization bug, fixed by removing the manual `Normalize` from `GTSRBDetectionDataset` and letting FRCNN handle it internally.
+- **High-Representation Success:** On classes with adequate training samples, the model performs flawlessly (e.g., **Class 20: 100%** [7/7], **Class 25: 100%** [4/4], **Class 38: 81.82%** [9/11], **Class 26: 75.00%** [3/4]).
+- **The Long-Tail Penalty:** Several rare categories display a `0.00%` accuracy. Because these categories only appear once or twice in the entire test split (`0/1` or `0/2`), failing to detect a single obscured, distant, or heavily downsampled sign drops that specific category's metric to zero, dragging down the overall *Mean* Average Precision (mAP) despite excellent core localization capabilities. exactly by this double-normalization bug, fixed by removing the manual `Normalize` from `GTSRBDetectionDataset` and letting FRCNN handle it internally.
+
+### Visualizations
+
+Qualitative test results are rendered in an horizontal layout with an operational threshold of `0.50` to filter out background noise. Above each predicted box, both the predicted class ID and its absolute confidence score are cleanly displayed.
+
+![Detection Examples Horizontal Layout](img/detection_example.png)
+*Horizontal test samples. Green boxes: Ground Truth annotations. Red boxes: Faster R-CNN predictions (`score > 0.5`) displaying Class ID and Confidence.*
+
+### Technical Notes
+
+- `torchvision.transforms.v2` was integrated throughout the pipeline, ensuring efficient, synchronous geometric augmentations across both the image tensors and their corresponding bounding box coordinates.
+- A custom `collate_fn` was provided to the `DataLoader` to properly batch images and variable-length target dictionaries (bounding boxes and ground-truth labels), overcoming standard collation errors caused by non-uniform tensor shapes across different road scenes.
+- `OmegaConf` and `wandb` were integrated into the pipeline to automate experiment configuration management, allowing model checkpoints from the best validating epoch to be automatically tracked and saved as versioned artifacts.
