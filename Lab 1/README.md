@@ -52,7 +52,15 @@ To establish a reference point before any fine-tuning, ResNet50 pretrained on Im
 
 The idea is simple but powerful: ImageNet pretraining already gives the backbone strong general visual representations, and a linear classifier on top of those features can go a long way without touching the network weights at all. This serves as the lower bound to beat with fine-tuning.
 
-> ⚠️ The final SVM classification report output was not captured in the notebook. The pipeline ran correctly (features extracted, SVM fitted) but the cell output is missing.
+### SVM Classification Report (no fine-tuning)
+
+The following summary highlights the performance of the SVM classifier on the extracted features:
+
+| Metric | Precision | Recall | F1-Score |
+|:---|:---:|:---:|:---:|
+| **Accuracy** | - | - | **0.6274** |
+| **Macro Avg** | 0.5168 | 0.5231 | 0.5143 |
+| **Weighted Avg** | 0.6264 | 0.6274 | 0.6242 |
 
 ---
 
@@ -92,19 +100,19 @@ All parameters are updated during training (full fine-tuning, not linear probing
 
 ### Results
 
-| Epoch | Train Loss | Test Accuracy |
+| Epoch | Train Loss | Val Accuracy |
 |:---:|:---:|:---:|
-| 1 | 0.367 | 97.66% ✓ |
-| 2 | 0.095 | 95.78% |
-| 3 | 0.096 | 95.25% |
-| 4 | 0.063 | **97.91%** ← best checkpoint |
-| 5 | 0.064 | 96.74% |
+| 1 | 0.399 | 96.10% |
+| 2 | 0.115 | 96.45% |
+| 3 | 0.086 | 96.82% |
+| 4 | 0.080 | 98.22% |
+| 5 | 0.079 | **98.27%** ← best checkpoint |
 
-**Final test accuracy: 96.74%** (best checkpoint saved at epoch 4: **97.91%**).
+**Final test accuracy: 97.61%** (best checkpoint saved at epoch 5: **98.27%**).
 
-The model converges remarkably fast — epoch 1 already hits 97.66%, which is a direct consequence of the strong ImageNet initialization. After that, accuracy oscillates slightly while loss continues to drop, a sign that the learning rate is slightly too high for the later stages of fine-tuning. A cosine annealing or step decay scheduler would likely stabilize the final epochs and squeeze out another point or two.
+The model converges remarkably fast — epoch 1 already hits 96.10%, which is a direct consequence of the strong ImageNet initialization. After that, accuracy oscillates slightly while loss continues to drop, a sign that the learning rate is slightly too high for the later stages of fine-tuning. A cosine annealing or step decay scheduler would likely stabilize the final epochs and squeeze out another point or two.
 
-Early stopping with `patience=3` correctly identified epoch 4 as the best checkpoint and would have stopped training at epoch 7 if more epochs had been run. The `WeightedRandomSampler` played a measurable role in keeping the model honest on underrepresented classes by oversampling them during training.
+Early stopping with `patience=3` correctly identified epoch 5 as the best checkpoint and would have stopped training at epoch 8 if more epochs had been run. The `WeightedRandomSampler` played a measurable role in keeping the model honest on underrepresented classes by oversampling them during training.
 
 ---
 
